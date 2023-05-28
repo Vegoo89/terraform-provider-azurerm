@@ -16,9 +16,9 @@ import (
 	"github.com/hashicorp/go-azure-helpers/resourcemanager/identity"
 	"github.com/hashicorp/go-azure-helpers/resourcemanager/location"
 	"github.com/hashicorp/go-azure-helpers/resourcemanager/tags"
-	"github.com/hashicorp/go-azure-sdk/resource-manager/containerservice/2023-02-02-preview/agentpools"
-	"github.com/hashicorp/go-azure-sdk/resource-manager/containerservice/2023-02-02-preview/maintenanceconfigurations"
-	"github.com/hashicorp/go-azure-sdk/resource-manager/containerservice/2023-02-02-preview/managedclusters"
+	"github.com/hashicorp/go-azure-sdk/resource-manager/containerservice/2023-03-02-preview/agentpools"
+	"github.com/hashicorp/go-azure-sdk/resource-manager/containerservice/2023-03-02-preview/maintenanceconfigurations"
+	"github.com/hashicorp/go-azure-sdk/resource-manager/containerservice/2023-03-02-preview/managedclusters"
 	dnsValidate "github.com/hashicorp/go-azure-sdk/resource-manager/dns/2018-05-01/zones"
 	"github.com/hashicorp/go-azure-sdk/resource-manager/operationalinsights/2020-08-01/workspaces"
 	"github.com/hashicorp/go-azure-sdk/resource-manager/privatedns/2018-09-01/privatezones"
@@ -1264,6 +1264,16 @@ func resourceKubernetesCluster() *pluginsdk.Resource {
 				Optional: true,
 				Default:  false,
 			},
+
+			"custom_ca_trust_certificates": {
+				Type:     pluginsdk.TypeList,
+				Optional: true,
+				MaxItems: 10,
+				Elem: &pluginsdk.Schema{
+					Type:         pluginsdk.TypeString,
+					ValidateFunc: validation.StringIsBase64,
+				},
+			},
 		},
 	}
 
@@ -1442,6 +1452,9 @@ func resourceKubernetesClusterCreate(d *pluginsdk.ResourceData, meta interface{}
 	if err != nil {
 		return err
 	}
+
+	customCaTrustCertList := d.Get("custom_ca_trust_certificates").(*[]string)
+	securityProfile.CustomCATrustCertificates = customCaTrustCertList
 
 	parameters := managedclusters.ManagedCluster{
 		ExtendedLocation: expandEdgeZone(d.Get("edge_zone").(string)),
@@ -1931,6 +1944,12 @@ func resourceKubernetesClusterUpdate(d *pluginsdk.ResourceData, meta interface{}
 		azureKeyVaultKmsRaw := d.Get("key_management_service").([]interface{})
 		azureKeyVaultKms, _ := expandKubernetesClusterAzureKeyVaultKms(ctx, keyVaultsClient, resourcesClient, d, azureKeyVaultKmsRaw)
 		existing.Model.Properties.SecurityProfile.AzureKeyVaultKms = azureKeyVaultKms
+	}
+
+	if d.HasChanges("custom_ca_trust_certificates") {
+		updateCluster = true
+		customCaTrustCertList := d.Get("custom_ca_trust_certificates").(*[]string)
+		existing.Model.Properties.SecurityProfile.CustomCATrustCertificates = customCaTrustCertList
 	}
 
 	if d.HasChanges("microsoft_defender") {
